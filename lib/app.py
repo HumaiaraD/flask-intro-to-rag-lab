@@ -29,8 +29,45 @@ def create_app():
         8. If generate_response raises RuntimeError, return a 503 service error.
         """
         # TODO: Replace this placeholder response with your implementation.
-        return jsonify({"message": "TODO: implement /api/ask"}), 501
+        data = request.get_json(silent=True)
 
+        if not isinstance(data, dict):
+            return jsonify({"error": "Query must be a non-empty string."}), 400
+
+        query = data.get("query")
+
+        if not isinstance(query, str) or not query.strip():
+            return jsonify({"error": "Query must be a non-empty string."}), 400
+
+        query = query.strip()
+        context_matches = retrieve_context(query, COMPANY_DOCUMENTS)
+
+        if not context_matches:
+            return jsonify({
+                "query": query,
+                "answer": (
+                    "The approved support documents do not contain "
+                    "enough information to answer this question."
+                ),
+                "sources": [],
+            }), 200
+
+        prompt = build_prompt(query, context_matches)
+
+        try:
+            answer = generate_response(prompt)
+        except RuntimeError:
+            return jsonify({
+                "error": "The model service is currently unavailable."
+            }), 503
+
+        return jsonify({
+            "query": query,
+            "answer": answer,
+            "sources": [
+                source_metadata(match) for match in context_matches
+            ],
+        }), 200
     return app
 
 
